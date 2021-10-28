@@ -1,0 +1,34 @@
+title E2E Key Exchange and Upload
+
+participant Client
+participant Service
+participant Storage
+
+Client->Client:Generate User pub/priv key pair
+Client->Service:GET /server (get server public key)
+activate Service
+Client<--Service:Response: server's public key
+deactivate Service
+
+Client->Service:POST /user (send user public key)
+activate Service
+Client<--Service: Response: 200 OK
+deactivate Service
+
+Service->(3)Object Storage
+
+
+Client->Client:generate file key and encrypt data
+
+Client->Storage: Upload file
+activate Client
+
+Client->Client:Encrypt file key with server public key
+
+Client->Service: POST /file/{file_geid} (send encrypted file key)
+activate Service
+
+Service->Storage:Save key to object metadata
+Service-->Client: Response: 200 OK 
+deactivate Service
+deactivate Client
