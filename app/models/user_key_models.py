@@ -3,8 +3,10 @@ from .base_models import APIResponse, PaginationRequest
 
 
 class POSTUserKey(BaseModel):
+    user_geid: str
     user_public_key: str
     is_sandboxed: bool = False
+    key_name: str = "default"
 
 class POSTUserKeyResponse(APIResponse):
     result: dict = Field({}, example={

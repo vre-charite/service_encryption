@@ -10,3 +10,5 @@ python-json-logger==0.1.11
 hvac==0.11.0
 minio==7.0.3
 cryptography==3.4.7
+fastapi_sqlalchemy==0.2.1
+psycopg2==2.8.6

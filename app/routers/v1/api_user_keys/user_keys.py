@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi_utils import cbv
+from fastapi_sqlalchemy import db
 import hvac
 
-from app.models.base_models import APIResponse, EAPIResponseCode
+from app.models.base_models import EAPIResponseCode
+from app.models.user_keys_sql import UserKeyModel
 from app.config import ConfigClass
 from app.models.user_key_models import POSTUserKey, POSTUserKeyResponse, GETUserKeyResponse, GETServerKeyResponse
-from app.resources.vault_helper import VaultClient
 from app.commons.logger_services.logger_factory_service import SrvLoggerFactory
 from app.resources.error_handler import APIException
 
@@ -13,74 +14,87 @@ logger = SrvLoggerFactory("api_user_keys").get_logger()
 
 router = APIRouter()
 
+
 @cbv.cbv(router)
 class UserKeys:
-
-    @router.get("/server", tags=["keys"], response_model=GETServerKeyResponse, summary="Get server public keys") 
+    @router.get("/server", tags=["keys"], response_model=GETServerKeyResponse, summary="Get server public keys")
     def get_server_key(self, request: Request):
         api_response = GETServerKeyResponse()
         try:
             vault = hvac.Client(url=ConfigClass.VAULT_SERVICE, verify=ConfigClass.VAULT_CRT, token=ConfigClass.VAULT_TOKEN)
             response = vault.secrets.kv.v1.read_secret(
-                path=f"server_keys/keys", 
+                path="server_keys/keys",
                 mount_point=""
             )
         except Exception as e:
             error_msg = str(e)
             logger.error(error_msg)
-            raise APIException(status_code=500, error_msg=f"Error getting key from vault: {error_msg}")
-        api_response.result = { 
+            raise APIException(
+                status_code=EAPIResponseCode.internal_error.value,
+                error_msg=f"Error getting key from vault: {error_msg}"
+            )
+        api_response.result = {
             "public_key": response["data"]["public_key"]
         }
         return api_response.json_response()
 
-    @router.get("/user", tags=["keys"], response_model=GETUserKeyResponse, summary="Get user public keys") 
-    def get_key(self, is_sandboxed: bool, request: Request):
+    @router.get("/user", tags=["keys"], response_model=GETUserKeyResponse, summary="Get user public keys")
+    def get_key(self, user_geid: str, is_sandboxed: bool, request: Request, key_name: str = "default"):
         api_response = GETUserKeyResponse()
-        jwt_token = request.headers.get("Authorization").replace("Bearer ", "")
-        if not jwt_token:
-            api_response.error_msg = "Missing jwt_token or refresh_token"
-            api_response.code = EAPIResponseCode.bad_request
-            logger.info(api_response.error_msg)
-            return api_response.json_response()
-
         try:
-            client = VaultClient(jwt_token=jwt_token)
-            if is_sandboxed:
-                path = "sandbox"
-            else:
-                path = "user"
-            result = client.get_secret(f"keys/{path}")
+            user_key = db.session.query(UserKeyModel).filter_by(
+                user_geid=user_geid,
+                is_sandboxed=is_sandboxed,
+                key_name=key_name
+            ).first()
         except Exception as e:
             error_msg = str(e)
             logger.error(error_msg)
-            raise APIException(status_code=500, error_msg=f"Error getting key from vault: {error_msg}")
-        api_response.result = result
-        return api_response.json_response() 
+            raise APIException(
+                status_code=EAPIResponseCode.internal_error.value,
+                error_msg=f"Error getting key from psql: {error_msg}"
+            )
+        if not user_key:
+            api_response.code = EAPIResponseCode.not_found
+            api_response.result = "Key not found"
+            return api_response.json_response()
+        api_response.result = user_key.to_dict()
+        return api_response.json_response()
 
-    @router.post("/user", tags=["keys"], response_model=POSTUserKeyResponse, summary="create user public keys") 
+    @router.post("/user", tags=["keys"], response_model=POSTUserKeyResponse, summary="create user public keys")
     def post_key(self, data: POSTUserKey, request: Request):
         api_response = POSTUserKeyResponse()
-        jwt_token = request.headers.get("Authorization").replace("Bearer ", "")
-        if not jwt_token:
-            api_response.error_msg = "Missing jwt_token or refresh_token"
-            api_response.code = EAPIResponseCode.bad_request
-            logger.info(api_response.error_msg)
-            return api_response.json_response()
-
+        user_key_data = {
+            "user_geid": data.user_geid,
+            "public_key": data.user_public_key,
+            "is_sandboxed": data.is_sandboxed,
+            "key_name": data.key_name,
+        }
         try:
-            client = VaultClient(jwt_token=jwt_token)
-            if data.is_sandboxed:
-                path = "sandbox"
+            user_key = db.session.query(UserKeyModel).filter_by(
+                user_geid=data.user_geid,
+                is_sandboxed=data.is_sandboxed,
+                key_name=data.key_name
+            ).first()
+            if user_key:
+                # Overwrite existing key
+                db.session.query(UserKeyModel).filter_by(
+                    user_geid=data.user_geid,
+                    is_sandboxed=data.is_sandboxed,
+                    key_name=data.key_name
+                ).update(values=user_key_data)
             else:
-                path = "user"
-            key_data = {
-                "public_key": data.user_public_key
-            }
-            client.create_or_update_secret(f"keys/{path}", key_data)
+                # Create new key
+                user_key = UserKeyModel(**user_key_data)
+            db.session.add(user_key)
+            db.session.commit()
+            db.session.refresh(user_key)
         except Exception as e:
             error_msg = str(e)
             logger.error(error_msg)
-            raise APIException(status_code=500, error_msg=f"Error getting key from vault: {error_msg}")
-        api_response.result = "success"
-        return api_response.json_response() 
+            raise APIException(
+                status_code=EAPIResponseCode.internal_error.value,
+                error_msg=f"Error adding key from psql: {error_msg}"
+            )
+        api_response.result = user_key.to_dict()
+        return api_response.json_response()
