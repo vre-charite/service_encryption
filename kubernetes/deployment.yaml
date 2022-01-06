@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
         - name: encryption
-          image: 10.32.42.225:5000/encryption:<VERSION>
+          image: s-hdp-vre-v007.charite.de/encryption:<VERSION>
           ports:
             - containerPort: 5082
           env:
