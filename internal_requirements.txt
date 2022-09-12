@@ -18,12 +18,5 @@
 // permissions and limitations under the Licence.
 // 
 
-version: '3'
-services:
-  web:
-    build: .
-    ports:
-      - "5082:5082"
-    environment:
-      - CONFIG_CENTER_ENABLED=true
-      - CONFIG_CENTER_BASE_URL=http://10.3.7.222:5062
+--extra-index-url https://${PIP_USERNAME}:${PIP_PASSWORD}@git.indocresearch.org/api/v4/groups/pilot/-/packages/pypi/simple
+common==0.0.19

@@ -1,3 +1,23 @@
+# Copyright 2022 Indoc Research
+# 
+# Licensed under the EUPL, Version 1.2 or – as soon they
+# will be approved by the European Commission - subsequent
+# versions of the EUPL (the "Licence");
+# You may not use this work except in compliance with the
+# Licence.
+# You may obtain a copy of the Licence at:
+# 
+# https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+# 
+# Unless required by applicable law or agreed to in
+# writing, software distributed under the Licence is
+# distributed on an "AS IS" basis,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied.
+# See the Licence for the specific language governing
+# permissions and limitations under the Licence.
+# 
+
 import requests
 from minio import Minio
 from minio.commonconfig import Tags
@@ -5,7 +25,7 @@ import os
 import time
 import datetime
 import jwt
-from ...config import ConfigClass
+from app.config import ConfigClass
 
 from minio.credentials.providers import ClientGrantsProvider
 
@@ -14,12 +34,12 @@ class Minio_Client_():
         # preset the tokens for refreshing
         self.access_token = access_token
         self.refresh_token = refresh_token
-        
+
         # retrieve credential provide with tokens
         c = self.get_provider()
 
         self.client = Minio(
-            ConfigClass.MINIO_ENDPOINT, 
+            ConfigClass.MINIO_ENDPOINT,
             credentials=c,
             secure=ConfigClass.MINIO_HTTPS)
 
@@ -33,7 +53,7 @@ class Minio_Client_():
             # "client_id":ConfigClass.MINIO_OPENID_CLIENT,
         }
 
-        # some note here since the upload api will be used by the vre cli
+        # some note here since the upload api will be used by the cli
         # the keycloak clients are kind of different. the portal use `react-app`
         # the cli use the `kong` so we need to use the `azp` attribute in token
         # then we can refresh token to update the at
@@ -41,14 +61,14 @@ class Minio_Client_():
         decode_at = jwt.decode(at, verify=False)
         payload.update({"client_id": decode_at.get("azp")})
         if decode_at.get("azp") == "kong":
-            payload.update({"client_secret": ConfigClass.KEYCLOAK_VRE_SECRET})
+            payload.update({"client_secret": ConfigClass.KEYCLOAK_SECRET})
 
         headers = {
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
         # use http request to fetch from keycloak
-        result = requests.post(ConfigClass.KEYCLOAK_URL+"/vre/auth/realms/vre/protocol/openid-connect/token", data=payload, headers=headers)
+        result = requests.post(ConfigClass.KEYCLOAK_URL + ConfigClass.KEYCLOAK_PATH, data=payload, headers=headers)
         if result.status_code != 200:
             raise Exception("Token refresh failed with "+str(result.json()))
 

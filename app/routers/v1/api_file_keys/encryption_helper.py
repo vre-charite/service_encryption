@@ -1,8 +1,27 @@
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes 
+# Copyright 2022 Indoc Research
+# 
+# Licensed under the EUPL, Version 1.2 or – as soon they
+# will be approved by the European Commission - subsequent
+# versions of the EUPL (the "Licence");
+# You may not use this work except in compliance with the
+# Licence.
+# You may obtain a copy of the Licence at:
+# 
+# https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+# 
+# Unless required by applicable law or agreed to in
+# writing, software distributed under the Licence is
+# distributed on an "AS IS" basis,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied.
+# See the Licence for the specific language governing
+# permissions and limitations under the Licence.
+# 
+
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.fernet import Fernet
-import os
 
 
 class EncryptionHelper(object):
@@ -17,12 +36,10 @@ class EncryptionHelper(object):
             key = serialization.load_pem_private_key(
                 key,
                 password=None
-                #password=bytes(self.PRIVATE_KEY_PASS, "utf-8")
             )
         else:
             key = serialization.load_pem_public_key(
                 key,
-                #password=bytes(PRIVATE_KEY_PASS, "utf-8")
             )
         return key
 

@@ -1,45 +1,65 @@
+# Copyright 2022 Indoc Research
+# 
+# Licensed under the EUPL, Version 1.2 or – as soon they
+# will be approved by the European Commission - subsequent
+# versions of the EUPL (the "Licence");
+# You may not use this work except in compliance with the
+# Licence.
+# You may obtain a copy of the Licence at:
+# 
+# https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12
+# 
+# Unless required by applicable law or agreed to in
+# writing, software distributed under the Licence is
+# distributed on an "AS IS" basis,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied.
+# See the Licence for the specific language governing
+# permissions and limitations under the Licence.
+# 
+
 import os
-import requests
-from requests.models import HTTPError
 from pydantic import BaseSettings, Extra
-from typing import Dict, Set, List, Any
+from typing import Dict, Any
 from functools import lru_cache
+from common import VaultClient
 
 SRV_NAMESPACE = os.environ.get("APP_NAME", "service_encryption")
 CONFIG_CENTER_ENABLED = os.environ.get("CONFIG_CENTER_ENABLED", "false")
-CONFIG_CENTER_BASE_URL = os.environ.get("CONFIG_CENTER_BASE_URL", "NOT_SET")
+
 
 def load_vault_settings(settings: BaseSettings) -> Dict[str, Any]:
     if CONFIG_CENTER_ENABLED == "false":
         return {}
     else:
-        return vault_factory(CONFIG_CENTER_BASE_URL)
+        return vault_factory()
 
-def vault_factory(config_center) -> dict:
-    url = config_center + \
-        "/v1/utility/config/{}".format(SRV_NAMESPACE)
-    config_center_respon = requests.get(url)
-    if config_center_respon.status_code != 200:
-        raise HTTPError(config_center_respon.text)
-    return config_center_respon.json()['result']
+
+def vault_factory() -> dict:
+    vc = VaultClient(os.getenv("VAULT_URL"), os.getenv("VAULT_CRT"), os.getenv("VAULT_TOKEN"))
+    return vc.get_from_vault(SRV_NAMESPACE)
 
 
 class Settings(BaseSettings):
+    env: str = os.environ.get('env', '')
+    version: str = "0.1.0"
+
     port: int = 5082
     host: str = "0.0.0.0"
-    VAULT_SERVICE: str = "https://vault.vault:8200"
-    VAULT_CRT: str = "/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    VAULT_TOKEN: str = "s.mwDUnR2OR0smmqMnWoPZpOe9"
+    ENCRYPT_VAULT_SERVICE: str = "https://vault.vault:8200"
+    ENCRYPT_VAULT_CRT: str = "/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    ENCRYPT_VAULT_TOKEN: str = "s.qG4Wk5UMnacdtEV5jvBzhBdb"
 
     # minio
     MINIO_OPENID_CLIENT: str
     MINIO_ENDPOINT: str
-    MINIO_HTTPS: bool
+    MINIO_HTTPS: bool = False
     KEYCLOAK_URL: str
+    KEYCLOAK_PATH: str
     MINIO_TEST_PASS: str
     MINIO_ACCESS_KEY: str
     MINIO_SECRET_KEY: str
-    KEYCLOAK_VRE_SECRET: str
+    KEYCLOAK_SECRET: str
 
     NEO4J_SERVICE: str
 
@@ -49,6 +69,11 @@ class Settings(BaseSettings):
     RDS_USER: str
     RDS_PWD: str
     RDS_SCHEMA_DEFAULT: str
+
+    def modify_values(self, settings):
+        settings.NEO4J_SERVICE = settings.NEO4J_SERVICE + "/v1/neo4j/"
+        settings.OPS_DB_URI = f"postgresql://{settings.RDS_USER}:{settings.RDS_PWD}@{settings.RDS_HOST}/{settings.RDS_DBNAME}"
+        return settings
 
     class Config:
         env_file = '.env'
@@ -72,35 +97,9 @@ class Settings(BaseSettings):
 
 @lru_cache(1)
 def get_settings():
-    settings =  Settings()
+    settings = Settings()
+    settings.modify_values(settings)
     return settings
 
 
-class ConfigClass(object):
-    settings = get_settings()
-    env = os.environ.get('env')
-    version = "0.1.0"
-    # vault
-    VAULT_SERVICE = "https://vault.vault:8200"
-    VAULT_CRT = "/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    VAULT_TOKEN = "s.mwDUnR2OR0smmqMnWoPZpOe9"
-
-    # minio
-    MINIO_OPENID_CLIENT = settings.MINIO_OPENID_CLIENT
-    MINIO_ENDPOINT = settings.MINIO_ENDPOINT
-    MINIO_HTTPS = False
-    KEYCLOAK_URL = settings.KEYCLOAK_URL
-    MINIO_TEST_PASS = settings.MINIO_TEST_PASS
-    MINIO_ACCESS_KEY = settings.MINIO_ACCESS_KEY
-    MINIO_SECRET_KEY = settings.MINIO_SECRET_KEY
-    KEYCLOAK_VRE_SECRET = settings.KEYCLOAK_VRE_SECRET
-
-    NEO4J_SERVICE = settings.NEO4J_SERVICE + "/v1/neo4j/"
-
-    RDS_HOST = settings.RDS_HOST
-    RDS_PORT = settings.RDS_PORT
-    RDS_DBNAME = settings.RDS_DBNAME
-    RDS_USER = settings.RDS_USER
-    RDS_PWD = settings.RDS_PWD
-    RDS_SCHEMA_DEFAULT = settings.RDS_SCHEMA_DEFAULT
-    OPS_DB_URI = f"postgresql://{RDS_USER}:{RDS_PWD}@{RDS_HOST}/{RDS_DBNAME}"
+ConfigClass = get_settings()
